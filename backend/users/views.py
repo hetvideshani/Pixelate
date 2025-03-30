@@ -6,8 +6,9 @@ from .models import User
 from core.supabase_client import supabase
 import uuid
 import json  # Needed to parse JSON request body
-import jwt
 import datetime
+import bcrypt
+import jwt
 from django.conf import settings
 import os
 import random
@@ -64,11 +65,12 @@ def signup(request):
         return JsonResponse({"error": "Invalid JSON format"}, status=400)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
+    
 
 @csrf_exempt
 @require_POST
 def signin(request):
-    """Signs in the user and sets JWT token in cookies."""
+    """Signs in the user and sets JWT access and refresh tokens in cookies."""
     try:
         data = json.loads(request.body)
         email = data.get("email")
@@ -82,22 +84,26 @@ def signin(request):
         if not response or not response.data:
             return JsonResponse({"error": "Invalid credentials"}, status=401)
 
-        user = response.data[0]  
+        user_dict = response.data[0]  
 
-        if not bcrypt.checkpw(password.encode("utf-8"), user["password_hash"].encode("utf-8")):
+        if not bcrypt.checkpw(password.encode("utf-8"), user_dict["password_hash"].encode("utf-8")):
             return JsonResponse({"error": "Invalid credentials"}, status=401)
 
-        # Generate JWT token
-        token_payload = {
-            "id": user["id"],
-            "email": user["email"],
-            "exp": datetime.datetime.utcnow() + datetime.timedelta(days=1),
-        }
-        token = jwt.encode(token_payload, settings.SECRET_KEY, algorithm="HS256")
+        if not user_dict:
+            return JsonResponse({"error": "Invalid credentials"}, status=401)
+        
+        user_serializer = UserSerializer(user_dict)
 
-        # Set token in an HTTP-only cookie
-        res = JsonResponse({"message": "Login successful"}, status=200)
-        res.set_cookie("token", token, httponly=True, samesite="Lax", secure=False)
+        # ✅ Manually generate JWT token with only user_id
+        refresh = RefreshToken()
+        refresh["user_id"] = str(user_dict["id"])  # Store only user_id
+
+        # Create response and set cookies
+        response = JsonResponse({
+            "message": "Login successful",
+            "user": user_serializer.data
+        })
+        response.set_cookie("access_token_django", str(refresh.access_token), httponly=True, samesite="Lax")
 
         return res
 
