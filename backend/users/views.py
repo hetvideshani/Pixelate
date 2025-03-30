@@ -6,6 +6,10 @@ from .models import User
 from core.supabase_client import supabase
 import uuid
 import json  # Needed to parse JSON request body
+import jwt
+import datetime
+from django.conf import settings
+import os
 
 @csrf_exempt  # Disable CSRF for this view
 @require_POST
@@ -54,5 +58,44 @@ def signup(request):
 
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON format"}, status=400)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+@csrf_exempt
+@require_POST
+def signin(request):
+    """Signs in the user and sets JWT token in cookies."""
+    try:
+        data = json.loads(request.body)
+        email = data.get("email")
+        password = data.get("password")
+
+        if not email or not password:
+            return JsonResponse({"error": "Email and password are required"}, status=400)
+
+        response = supabase.table("users").select("*").eq("email", email).execute()
+
+        if not response or not response.data:
+            return JsonResponse({"error": "Invalid credentials"}, status=401)
+
+        user = response.data[0]  
+
+        if not bcrypt.checkpw(password.encode("utf-8"), user["password_hash"].encode("utf-8")):
+            return JsonResponse({"error": "Invalid credentials"}, status=401)
+
+        # Generate JWT token
+        token_payload = {
+            "id": user["id"],
+            "email": user["email"],
+            "exp": datetime.datetime.utcnow() + datetime.timedelta(days=1),
+        }
+        token = jwt.encode(token_payload, settings.SECRET_KEY, algorithm="HS256")
+
+        # Set token in an HTTP-only cookie
+        res = JsonResponse({"message": "Login successful"}, status=200)
+        res.set_cookie("token", token, httponly=True, samesite="Lax", secure=False)
+
+        return res
+
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
