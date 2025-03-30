@@ -14,7 +14,7 @@ from pathlib import Path
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-
+import dj_database_url
 load_dotenv()
 
 
@@ -65,14 +65,25 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "backend.urls"
 
+# REST_FRAMEWORK = {
+#     'DEFAULT_AUTHENTICATION_CLASSES': (
+#         'rest_framework.authentication.SessionAuthentication',
+#     ),
+#     'DEFAULT_PERMISSION_CLASSES': [
+#         'rest_framework.permissions.IsAuthenticated',
+#     ]
+# }
+
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.BasicAuthentication',
         'rest_framework.authentication.SessionAuthentication',
-    ),
+    ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
-    ]
+        'rest_framework.permissions.AllowAny',  # Change to 'IsAuthenticated' later for production
+    ],
 }
+
 
 ALLOWED_HOSTS = ['*']
 
@@ -103,7 +114,13 @@ DATABASES = {
         'ENGINE': 'django.db.backends.dummy'
     }
 }
-
+# DATABASES = {
+#     'default': dj_database_url.config(
+#         default=os.getenv("DATABASE_URL"), 
+#         conn_max_age=600, 
+#         ssl_require=True
+#     )
+# }
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
