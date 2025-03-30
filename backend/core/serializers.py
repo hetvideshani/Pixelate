@@ -14,6 +14,7 @@ class CourseSerializer(serializers.Serializer):
     description = serializers.CharField()
     difficulty_level = serializers.ChoiceField(choices=['beginner', 'intermediate', 'advanced'])
     language = serializers.CharField(max_length=50)
+    user_id = serializers.UUIDField(required=False)
     created_at = serializers.DateTimeField(read_only=True)
 
 class LessonSerializer(serializers.Serializer):

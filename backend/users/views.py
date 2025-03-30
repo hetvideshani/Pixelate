@@ -12,16 +12,6 @@ from django.views.decorators.http import require_POST
 from rest_framework_simplejwt.tokens import RefreshToken
 from core.serializers import UserSerializer
 
-class UserObject:
-    """Converts a dictionary into an object-like structure to mimic Django's User model."""
-    def __init__(self, user_dict):
-        self.id = user_dict.get("id")  # Ensure the ID exists
-        self.email = user_dict.get("email")
-        self.full_name = user_dict.get("full_name")
-
-
-
-
 @csrf_exempt  # Disable CSRF for this view
 @require_POST
 def signup(request):
