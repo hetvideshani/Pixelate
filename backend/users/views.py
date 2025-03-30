@@ -1,6 +1,6 @@
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_GET
 import bcrypt
 from .models import User
 from core.supabase_client import supabase
@@ -10,6 +10,10 @@ import jwt
 import datetime
 from django.conf import settings
 import os
+import random
+import smtplib
+from email.mime.text import MIMEText
+from django.core.cache import cache
 
 @csrf_exempt  # Disable CSRF for this view
 @require_POST
@@ -97,5 +101,163 @@ def signin(request):
 
         return res
 
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+    
+@csrf_exempt
+@require_GET
+def getuserprofile(request):
+    """Get user profile"""
+    try:
+        token = request.COOKIES.get("token")
+        
+        if not token:
+            return JsonResponse({"error": "Token not found"}, status=401)
+        
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        user_id = payload["id"]
+        response = supabase.table("users").select("*").eq("id", user_id).execute()
+        
+        if not response or not response.data:
+            return JsonResponse({"error": "User not found"}, status=404)
+        
+        user = response.data[0]
+        return JsonResponse({"user": user}, status=200)
+    
+    except jwt.ExpiredSignatureError:
+        return JsonResponse({"error": "Token expired"}, status=401)
+    
+    except jwt.InvalidTokenError:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+@csrf_exempt
+@require_POST
+def updateuserprofile(request):
+    """Update user profile"""
+    try:
+        token = request.COOKIES.get("token")
+        
+        if not token:
+            return JsonResponse({"error": "Token not found"}, status=401)
+        
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        user_id = payload["id"]
+        
+        data = json.loads(request.body)
+        full_name = data.get("full_name")
+        email = data.get("email")
+        preferred_language = data.get("preferred_language")
+        
+        if not full_name and not preferred_language and not email:
+            return JsonResponse({"error": "At least one field is required"}, status=400)
+        
+        response = supabase.table("users").update({
+            "full_name": full_name,
+            "email": email,
+            "preferred_language": preferred_language
+        }).eq("id", user_id).execute()
+        
+        if not response or not response.data:
+            return JsonResponse({"error": "Failed to update user profile"}, status=500)
+        
+        return JsonResponse({"message": "User profile updated successfully"}, status=200)
+    except jwt.ExpiredSignatureError:
+        return JsonResponse({"error": "Token expired"}, status=401)
+    except jwt.InvalidTokenError:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+    
+@csrf_exempt
+@require_POST
+def sendverificationcode(request):
+    """Send verification code to the user's email"""
+    try:
+        token = request.COOKIES.get("token")
+        
+        if not token:
+            return JsonResponse({"error": "Token not found"}, status=401)
+        
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        user_id = payload["id"]
+        user_email = payload["email"]
+        
+        verification_code = str(random.randint(100000, 999999))
+        
+        cache.set(f"verification_code:{user_id}", verification_code, timeout=300) 
+        message = MIMEText(f"Your verification code is: {verification_code}")
+        message["Subject"] = "Verification Code"
+        message["From"] = settings.EMAIL_HOST_USER
+        message["To"] = user_email
+        
+        server = smtplib.SMTP(settings.EMAIL_HOST, settings.EMAIL_PORT)
+        server.starttls()
+        server.login(settings.EMAIL_HOST_USER, settings.EMAIL_HOST_PASSWORD)
+        server.sendmail(settings.EMAIL_HOST_USER, user_email, message.as_string())
+        server.quit()
+        
+        return JsonResponse({"message": "Verification code sent successfully"}, status=200)
+    
+    except jwt.ExpiredSignatureError:
+        return JsonResponse({"error": "Token expired"}, status=401)
+    
+    except jwt.InvalidTokenError:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+    
+@csrf_exempt
+@require_POST
+def changepassword(request):
+    """Change user's password"""
+    try:
+        token = request.COOKIES.get("token")
+        
+        if not token:
+            return JsonResponse({"error": "Token not found"}, status=401)
+        
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        user_id = payload["id"]
+        user_email = payload["email"]
+        
+        data = json.loads(request.body)
+        verificationcode = data.get("verificationcode")
+        password = data.get("password")
+        
+        if not verificationcode or not password:
+            return JsonResponse({"error": "All fields are required"}, status=400)
+        
+        verification_code_from_cache = cache.get(f"verification_code:{user_email}")
+        
+        if not verification_code_from_cache :
+            return JsonResponse({"error": "Verification code not found or expired"}, status=401)
+        
+        if verificationcode!= verification_code_from_cache:
+            return JsonResponse({"error": "Invalid verification code"}, status=401)
+        
+        # Hash password
+        password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
+        
+        response = supabase.table("users").update({
+            "password_hash": password_hash
+        }).eq("id", user_id).execute()
+        
+        if not response or not response.data:
+            return JsonResponse({"error": "Failed to change password"}, status=500)
+        
+        cache.delete(f"verification_code:{user_email}")
+        
+        return JsonResponse({"message": "Password changed successfully"}, status=200)
+    
+    except jwt.ExpiredSignatureError:
+        return JsonResponse({"error": "Token expired"}, status=401)
+    
+    except jwt.InvalidTokenError:
+        return JsonResponse({"error": "Invalid token"}, status=401)
+    
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
