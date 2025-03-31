@@ -10,11 +10,12 @@ class UserSerializer(serializers.Serializer):
 
 class CourseSerializer(serializers.Serializer):
     id = serializers.UUIDField(read_only=True)
+    user_id = serializers.UUIDField(required=False)  
     title = serializers.CharField(max_length=255)
     description = serializers.CharField()
+    tags = serializers.ListField(child=serializers.CharField(max_length=100), required=False)
+    languages = serializers.ListField(child=serializers.CharField(max_length=50), required=True)
     difficulty_level = serializers.ChoiceField(choices=['beginner', 'intermediate', 'advanced'])
-    language = serializers.CharField(max_length=50)
-    user_id = serializers.UUIDField(required=False)
     created_at = serializers.DateTimeField(read_only=True)
 
 class LessonSerializer(serializers.Serializer):
@@ -70,4 +71,6 @@ class FeedbackSerializer(serializers.Serializer):
     course_id = serializers.UUIDField()
     rating = serializers.IntegerField(min_value=1, max_value=5)
     comments = serializers.CharField(required=False, allow_blank=True)
+    likes = serializers.IntegerField(default=0, min_value=0, required=False)
+    dislikes = serializers.IntegerField(default=0, min_value=0, required=False)
     created_at = serializers.DateTimeField(read_only=True)
