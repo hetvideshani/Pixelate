@@ -19,7 +19,7 @@ def get_courses(request):
         if response.count is None:
             return Response({"data" : "no courses added!"})
         
-        return Response("hii")
+        return Response({"data": response.data})
     except Exception as e:
         return Response({"error": str(e)})
     
